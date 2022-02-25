@@ -1,1 +1,6 @@
+# Ignore API keys and chat IDs
 keys.py
+
+# Ignore caches
+__pycache__/
+tempCodeRunnerFile.py

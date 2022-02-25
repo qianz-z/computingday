@@ -1,11 +1,8 @@
-from asyncio.windows_events import NULL
 from telegram import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
-    KeyboardButton,
-    ParseMode,
 )
 
 from telegram.ext import (
@@ -14,9 +11,7 @@ from telegram.ext import (
     MessageHandler,
     Filters,
     ConversationHandler,
-    CallbackContext,
     CallbackQueryHandler,
-    InlineQueryHandler
 )
 
 from keys import API_KEY, USER_ADMINS, CHAT_PARTICIPANTS, CHAT_ADMINS
@@ -59,6 +54,19 @@ for i, state in enumerate(_STATES):
     globals()[state] = i
 
 
+
+class Group:
+    def __init__(self, group_name, transporter):
+        self.group_name = group_name
+        self.transporter = transporter
+        self.health = 200
+        self.items = []
+        self.base = 1
+        self.hero = None
+        self.hero_level = 1  # Should be None
+        
+
+
 def start(update, context):
     chat_id = update.effective_chat.id
     if "registered" in context.user_data and context.user_data['registered']:
@@ -75,8 +83,7 @@ def start(update, context):
     # What users will receive
     text = "Welcome to Computing Day Mass Game! "
     update.message.reply_text(text)
-    context.user_data["registered"] = False
-    context.user_data["group_name"] = None
+    context.user_data["group"] = None
     print("Someone started the bot!")
     return main_menu(update, context)
 
@@ -85,20 +92,18 @@ def start(update, context):
 
 def main_menu(update, context):
     keyboard = [
-        [InlineKeyboardButton("Arena status", callback_data='arena_status'), ],
-        [InlineKeyboardButton("Rules", callback_data='rules'), ],
-        [InlineKeyboardButton("Use items", callback_data='use_items'), ],
-        [InlineKeyboardButton("Base Declaration",
-                              callback_data='base_declare'), ],
+        [InlineKeyboardButton("Arena status", callback_data='arena_status')],
+        [InlineKeyboardButton("Rules", callback_data='rules')],
+        [InlineKeyboardButton("Use items", callback_data='use_items')],
+        [InlineKeyboardButton("Base Declaration", callback_data='base_declare')]
     ]
-    if not context.user_data['registered']:
+    if not context.user_data['group']:
         keyboard.append(
             [InlineKeyboardButton("Register", callback_data='register'), ],
         )
 
     text = "Pick an option!"
-    update.message.reply_text(
-        text, reply_markup=InlineKeyboardMarkup(keyboard))
+    update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     return MAIN_MENU
 
 
@@ -112,7 +117,7 @@ def base_declare2(update, context):
     userinput = update.message.text
     group_name = context.user_data['group_name']
     group = context.bot_data['groups'][group_name]
-    group['base'] = userinput
+    group.base = userinput
 
     text = "Please send us a picture of the location of your base."
     update.message.reply_text(text)
@@ -120,21 +125,18 @@ def base_declare2(update, context):
 
 
 def base_declare3(update, context):
-    group_name = context.user_data['group_name']
     text = "Thanks! An admin will be verifying ,.."
     update.message.reply_text(text)
 
-    print(update.message.photo)
-    group_name = context.user_data['group_name']
-    group = context.bot_data['groups'][group_name]
-    base = group['base']
-    for admin in USER_ADMINS:
-        context.bot.send_photo(
-            admin,
-            photo=update.message.photo[-1].file_id,
-            caption=f"Received from group: {group_name}\n"
-            f"Base located at: {base}"
+    group = context.user_data['group']
+    context.bot.send_photo(
+        CHAT_ADMINS,
+        photo=update.message.photo[-1].file_id,
+        caption=(
+            f"Received from group: {group.group_name}\n"
+            f"Base located at: {group.base}"
         )
+    )
 
     return MAIN_MENU
 
@@ -144,9 +146,7 @@ def arena_status(update, context):
     for group_name in context.bot_data["groups"]:
         # group will store all the key-value pairs in the dictionary
         group = context.bot_data["groups"][group_name]
-        group_name = group["group_name"]
-        group_health = group["health"]
-        text += f"{group_name}: {group_health}\n"
+        text += f"{group.group_name}: {group.health}\n"
 
     update.callback_query.message.chat.send_message(text)
 
@@ -167,16 +167,15 @@ def confirm_register(update, context):
     group_name = update.message.text
     context.user_data['group_name'] = group_name
 
-    if group_name not in context.bot_data['groups']:
-        text = f"{group_name} will be the your group name. Confirm?"
-        # Reply to the message that the user sent
-        update.message.reply_text(
-            text, reply_markup=ReplyKeyboardMarkup([['Yes', 'No']]))
-        return REGISTER_NAME_CONFIRM
-    else:
-        text = f"{group_name} is taken. Please choose a different group name"
+    if group_name in context.bot_data['groups']:
+        text = f"{group_name} is taken. Please choose a different group name."
         update.message.reply_text(text)
         return REGISTER_NAME
+
+    text = f"{group_name} will be the your group name. Confirm?"
+    # Reply to the message that the user sent
+    update.message.reply_text(text, reply_markup=ReplyKeyboardMarkup([['Yes', 'No']]))
+    return REGISTER_NAME_CONFIRM
 
 
 def register_change(update, context):
@@ -187,18 +186,13 @@ def register_change(update, context):
 
 
 def register_done(update, context):
-    text = "Yay! Congratz."
-    update.message.reply_text(text, reply_markup=ReplyKeyboardRemove())
     group_name = context.user_data['group_name']
+    group = Group(group_name, update.effective_user.id)
+    context.bot_data['groups'][group_name] = group
+    context.user_data['group'] = group
 
-    context.bot_data['groups'][group_name] = {
-        'group_name': group_name,
-        'health': 200,
-        'items': [],
-        'base': 1,
-        'hero': None,
-        'hero_level': 1,
-    }
+    text = "Sweet! Send /menu to see what you can do now."
+    update.message.reply_text(text, reply_markup=ReplyKeyboardRemove())
     return CHOOSE_HERO
 
 
@@ -218,14 +212,15 @@ def choose_hero(update, context):
     
 def choose_hero_confirm(update, context):
     hero = update.callback_query.data
-    group_name = context.user_data["group_name"]
-    context.bot_data['groups'][group_name]['hero'] = hero
+    group = context.user_data['group']
+    group.hero = hero
     return MAIN_MENU
 
 
 def use_item(update, context):
-    group_name = context.user_data["group_name"]
-    items = context.bot_data['groups'][group_name]['items']
+    group = context.user_data['group']
+    items = group.items
+    
     keyboard = []
     for item in items:
         keyboard.append([InlineKeyboardButton(item, callback_data=item)])
@@ -251,8 +246,10 @@ def use_item2(update, context):
 
 
 def use_item_done(update, context):
+    group_name = context.user_data['group'].group_name
+    
     # Send what happened in participants group
-    text = f"Someone has attacked {group}'s base!"
+    text = f"Someone has attacked {group_name}'s base!"
     context.bot.send_message(CHAT_PARTICIPANTS, text)
     
 
@@ -269,10 +266,10 @@ def admin_main_menu(update, context):
     return ADMIN_MENU
 
 def admin_manual_update1(update, context):
-    text = "Pick a group's base to edit"
     keyboard = []
     for group_name in context.bot_data["groups"]:
         keyboard.append([InlineKeyboardButton(group_name, callback_data=group_name)])
+    text = "Pick a group's base to edit"
 
     update.callback_query.message.chat.send_message(text, reply_markup=InlineKeyboardMarkup(keyboard))
     return ADMIN_MANUAL_UPDATE2
@@ -307,8 +304,8 @@ def admin_manual_update4(update, context):
     text = f"Added {delta_health} to {group_name}"
     update.message.reply_text(text)
         
-    context.bot_data['groups'][group_name]['health'] += delta_health
-    group_final_health = context.bot_data['groups'][group_name]['health']
+    context.bot_data['groups'][group_name].health += delta_health
+    group_final_health = context.bot_data['groups'][group_name].health
 
     # Send announcement to participants' group
     text = (
@@ -324,19 +321,18 @@ def admin_arena_status(update, context):
     for group_name in context.bot_data["groups"]:
         # group will store all the key-value pairs in the dictionary
         group = context.bot_data["groups"][group_name]
-        group_name = group["group_name"]
-        group_health = group["health"]
+        group_name = group.group_name
+        group_health = group.health
         text += f"{group_name}: {group_health}\n"
     update.callback_query.message.chat.send_message(text)
 
 # Choose which group to give
 def admin_give_items(update, context):
-    text = "Pick a group to give the item to!"
     keyboard = []
     for group_name in context.bot_data["groups"]:
-        keyboard.append([InlineKeyboardButton(
-            group_name, callback_data=group_name)])
+        keyboard.append([InlineKeyboardButton(group_name, callback_data=group_name)])
 
+    text = "Pick a group to give the item to!"
     update.callback_query.message.chat.send_message(
         text, reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -368,11 +364,10 @@ def admin_give_items3(update, context):
 
     text = f"You've given {group_name} the item: {item}"
 
-    context.bot_data['groups'][group_name]['items'].append(item)
+    group = context.bot_data['groups'][group_name]
+    group.items.append(item)
 
     update.callback_query.message.chat.send_message(text)
-
-    print(context.bot_data)
 
     return ADMIN_MENU
 
@@ -440,28 +435,10 @@ if __name__ == '__main__':
     dispatcher = updater.dispatcher
     dispatcher.add_handler(top_conv)
 
-    group1 = {
-        'group_name': "Group1",
-        'health': 200,
-        'items': []
-
-    }
-    group2 = {
-        'group_name': "Group2",
-        'health': -999999999999999990,
-        'items': []
-    }
-    dispatcher.bot_data['groups'] = {
-        e['group_name']: e for e in [group1, group2]}
-
-    # temp_dict = {}
-    # for group in [group1, group2]:
-    #     temp_dict[group['group_name']] = group
-    #     print(temp_dict)
-    # dispatcher.bot_data['groups'] = temp_dict
-
-    # dispatcher.bot_data['groups'] = {}
-    # print(dispatcher.bot_data['groups'])
+    # Populate fake data
+    group1 = Group("team doggos", 12345)
+    group2 = Group("team cats", 12345)
+    dispatcher.bot_data['groups'] = { group.group_name: group for group in [group1, group2] }
 
     updater.start_polling()
     updater.idle()
