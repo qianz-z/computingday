@@ -50,7 +50,9 @@ ITEMS_OFFENSIVE = {
     'barrett': 80
 }
 
-ITEMS_DEFENSIVE = ['potion', 'base_mover']
+#defence_mechanism = +100 base health
+ITEMS_DEFENSIVE = ['potion', 'base_mover', 'defence_mechanism']
+
 
 
 # Set some state variables
@@ -59,40 +61,65 @@ for i, state in enumerate(_STATES):
     globals()[state] = i
 
 
-class Group:
+class Hero:
     def __init__(self, group_name, transporter):
         self.group_name = group_name
         self.transporter = transporter
         self.health = 200
+        self.strength_multiplier = 1
         self.items = []
-        self.base = 1
-        self.hero = None
+        self.base_level = 1
         self.hero_level = 1  # Should be None
         self.using_potion = False
         
+class CaptainAmerica(Hero):
+    def __init__(self, group_name, transporter):
+        super().__init__(group_name, transporter)
+        self.health = 300
+        
+        
+class Hulk(Hero):
+    def __init__(self, group_name, transporter):
+        super().__init__(group_name, transporter)
+        self.strength_multiplier = 1.5
+    
 
-
+HEROS = {
+    'bat_girl': CaptainAmerica,
+    'captain_america': CaptainAmerica,
+    'jesse_quick': CaptainAmerica,
+    'iron_man': CaptainAmerica,
+    'groot': CaptainAmerica,
+    'six_sense': CaptainAmerica,
+    'hulk': Hulk
+}
 
 def start(update, context):
     chat_id = update.effective_chat.id
-    if "registered" in context.user_data and context.user_data['registered']:
-        return main_menu(update, context)
 
-    if chat_id in USER_ADMINS:
-        text = "Welcome to the exclusive ADMINS ONLY page!!!!"
+    if chat_id > 0: #private message
+        if "registered" in context.user_data and context.user_data['registered']:
+            return main_menu(update, context)
+
+        if chat_id in USER_ADMINS:
+            text = "Welcome to the exclusive ADMINS ONLY page!!!!"
+            update.message.reply_text(text)
+            context.user_data['admin_giveitem_group'] = None
+            context.user_data['admin_manual_group'] = None
+            context.user_data['admin_delta_health'] = 0
+            context.user_data['using_item'] = None
+            return admin_main_menu(update, context)
+
+        # What users will receive
+        text = "Welcome to Computing Day Mass Game! "
         update.message.reply_text(text)
-        context.user_data['admin_giveitem_group'] = None
-        context.user_data['admin_manual_group'] = None
-        context.user_data['admin_delta_health'] = 0
-        context.user_data['using_item'] = None
-        return admin_main_menu(update, context)
-
-    # What users will receive
-    text = "Welcome to Computing Day Mass Game! "
-    update.message.reply_text(text)
-    context.user_data["group"] = None
-    print("Someone started the bot!")
-    return main_menu(update, context)
+        context.user_data["group"] = None
+        print("Someone started the bot!")
+        return main_menu(update, context)
+    else:
+        text = "Please private message the bot instead!"
+        update.message.reply_text(text)
+        return
 
 # ====================  USER FUNCTIONS ====================
 
@@ -123,14 +150,17 @@ def main_menu(update, context):
 
 
 def status(update, context):
-    group = context.user_data['group_name']
+    update.callback_query.delete_message()
+
+    group = context.user_data['group']
     text = ""
-    for key, value in group.__dict__:
+    for key, value in group.__dict__.items():
         text += f"{key}: {value} \n"
-    update.message.reply_text(text)
+    update.callback_query.message.chat.send_message(text)
 
 
 def arena_status(update, context):
+    update.callback_query.delete_message()
     text = "Here are the healths of the current groups.\n"
     for group_name in context.bot_data["groups"]:
         # group will store all the key-value pairs in the dictionary
@@ -142,11 +172,14 @@ def arena_status(update, context):
 
 
 def rules(update, context):
+    update.callback_query.delete_message()
     text = "Below are the rules of the game"
     update.callback_query.message.chat.send_message(text)
 
 
 def register(update, context):
+    update.callback_query.delete_message()
+
     text = 'Please enter your group name below.'
     # Reply to the query that the user sent
     update.callback_query.message.chat.send_message(text)
@@ -178,9 +211,6 @@ def register_change(update, context):
 
 def register_done(update, context):
     group_name = context.user_data['group_name']
-    group = Group(group_name, update.effective_user.id)
-    context.bot_data['groups'][group_name] = group
-    context.user_data['group'] = group
     text = f"Successfully registered {group_name}."
     update.message.reply_text(text, reply_markup=ReplyKeyboardRemove())
     context.user_data['registered'] = True
@@ -193,6 +223,7 @@ def register_done(update, context):
         [InlineKeyboardButton("Iron Supplements", callback_data='iron_man')],
         [InlineKeyboardButton("Fertiliser", callback_data='groot')],
         [InlineKeyboardButton("Icecream", callback_data='six_sense')],
+        [InlineKeyboardButton("Vegetable", callback_data='hulk')],
     ]
     update.message.reply_text(
         text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -200,11 +231,18 @@ def register_done(update, context):
 
 
 def choose_hero_confirm(update, context):
+    group_name = context.user_data['group_name']
     hero = update.callback_query.data
-    group = context.user_data['group']
+    class_constructor = HEROS[hero]
+    group = class_constructor(group_name, update.effective_user.id)
+    context.user_data['group'] = group
+    context.bot_data['groups'][group_name] = group
+    
     group.hero = hero
 
     text = f"Your hero is {hero}.\n"
+
+    
     update.callback_query.message.chat.send_message(text)
     text = "Now choose your base location."
     update.callback_query.message.chat.send_message(text)
@@ -277,35 +315,46 @@ def use_item2(update, context):
 
 
 def use_item_done(update, context):
+    other_group_name = update.callback_query.data
+    other_group = context.bot_data['groups'][other_group_name]
+    
     group = context.user_data['group']
+
     item = context.user_data['using_item']
 
     # Send what happened in participants group
     if item in ITEMS_OFFENSIVE:
-        damage = ITEMS_OFFENSIVE[item]
-        group.health -= damage
-        text = (f"Someone has attacked {group.group_name}'s base using {item}!\n"
-               f"{group.group_name}'s base is now {group.health}"
+        damage = ITEMS_OFFENSIVE[item] * group.strength_multiplier
+        other_group.health -= damage
+        text = (f"Someone has attacked {other_group.group_name}'s base using {item}!\n"
+               f"{other_group.group_name}'s base is now {other_group.health}"
         )
         
     elif item in ITEMS_DEFENSIVE:
-        text = f"{group.group_name}'s base has just used {item}!\n"
-       if item == "potion":
-            group.using_potion = True
-            text += f"{group.group_name} is invulnerable for 5 minutes!"
+        text = f"{other_group.group_name}'s base has just used {item}!\n"
+        if item == "potion":
+            other_group.using_potion = True
+            text += f"{other_group.group_name} is invulnerable for 5 minutes!"
             
             def potion_expired(context):
-                group.using_potion = False
+                other_group.using_potion = False
                 
-                text = f"Tick tock, 5 minutes is up! {group.group_name}'s potion effect has subsided. They are now vulnerable!"
+                text = f"Tick tock, 5 minutes is up! {other_group.group_name}'s potion effect has subsided. They are now vulnerable!"
                 context.bot.send_message(CHAT_PARTICIPANTS, text)
                 context.bot.send_message(CHAT_ADMINS, text)
 
             context.job_queue.run_once(potion_expired, 15)
 
         elif item == "base_mover":
-            text += f"{group.group_name} has just shifted their base to an unknown location. Good luck finding!"
+            text += f"{other_group.group_name} has just shifted their base to an unknown location. Good luck finding!"
+            
+        elif item == "defence_mechanism":
+            other_group.health += 100
+            text = (f"{other_group.group_name}'s base has just used {item}!\n"
+               f"{other_group.group_name}'s base is now {other_group.health}"
+            )
         
+    group.items.remove(item)
     context.bot.send_message(CHAT_PARTICIPANTS, text)
     context.bot.send_message(CHAT_ADMINS, text)
     
@@ -530,8 +579,8 @@ if __name__ == '__main__':
     # dispatcher.add_error_handler(err)
 
     # Populate fake data
-    group1 = Group("team doggos", 200)
-    group2 = Group("team cats", 200)
+    group1 = Hero("team doggos", 200)
+    group2 = Hero("team cats", 200)
     dispatcher.bot_data['groups'] = {
         group.group_name: group for group in [group1, group2]}
     dispatcher.user_data[273343228] = {
