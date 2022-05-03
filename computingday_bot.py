@@ -1,3 +1,4 @@
+import os
 import traceback
 
 from telegram import (
@@ -14,9 +15,8 @@ from telegram.ext import (
     Filters,
     ConversationHandler,
     CallbackQueryHandler,
+    PicklePersistence,
 )
-
-#from telegram.ext import pickle, DictPersistence
 
 from keys import API_KEY, USER_ADMINS, CHAT_PARTICIPANTS, CHAT_ADMINS
 
@@ -545,8 +545,8 @@ if __name__ == '__main__':
                 CallbackQueryHandler(arena_status, pattern='arena_status'),
                 CallbackQueryHandler(
                     admin_give_items, pattern='admin_give_items'),
-                CallbackQueryHandler(admin_manual_update1,
-                                     pattern='admin_manual_update'),
+                CallbackQueryHandler(
+                    admin_manual_update1, pattern='admin_manual_update'),
             ],
             ADMIN_MANUAL_UPDATE2: [
                 CallbackQueryHandler(admin_manual_update2)
@@ -566,26 +566,35 @@ if __name__ == '__main__':
             ]
         },
         # if it is not in entry point or in state
-        
         fallbacks=[
             CommandHandler('menu', callback=menu)
-        ]
+        ],
+        name='top_conv',
+        persistent=True
     )
 
-    updater = Updater(API_KEY)
-    dispatcher = Updater(API_KEY)
+
+    file_exists = os.path.exists('persistence.pickle')
+        
+    persist = PicklePersistence('persistence.pickle')
+    updater = Updater(API_KEY, use_context=True, persistence=persist)
     dispatcher = updater.dispatcher
     dispatcher.add_handler(top_conv)
     # dispatcher.add_error_handler(err)
 
-    # Populate fake data
-    group1 = Hero("team doggos", 200)
-    group2 = Hero("team cats", 200)
-    dispatcher.bot_data['groups'] = {
-        group.group_name: group for group in [group1, group2]}
-    dispatcher.user_data[273343228] = {
-        'group': group1
-    }
+    if not file_exists:
+        # Populate fake data
+        group1 = Hero("team doggos", 200)
+        group2 = Hero("team cats", 200)
+        dispatcher.bot_data['groups'] = {
+            group.group_name: group for group in [group1, group2]
+        }
+        dispatcher.user_data[273343228] = {
+            'group': group1
+        }
 
     updater.start_polling()
     updater.idle()
+    persist.flush()
+    print("Stopping...")
+

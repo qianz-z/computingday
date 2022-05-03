@@ -4,3 +4,6 @@ keys.py
 # Ignore caches
 __pycache__/
 tempCodeRunnerFile.py
+
+# Ignore database
+persistence.pickle
