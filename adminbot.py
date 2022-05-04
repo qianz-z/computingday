@@ -11,14 +11,17 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
-from const import ADMIN_MENU
 from const import (
-    ADMIN_MENU,
+    MENU_ADMIN,
     ADMIN_GIVE_ITEM_NEXT,
     ADMIN_ITEM_CONFIRMATION,
     ADMIN_MANUAL_UPDATE2,
     ADMIN_MANUAL_UPDATE3,
     ADMIN_MANUAL_UPDATE4,
+)
+from const import (
+    ITEMS_OFFENSIVE,
+    ITEMS_DEFENSIVE,
 )
 from keys import CHAT_PARTICIPANTS, CHAT_ADMINS
 
@@ -31,7 +34,7 @@ def admin_menu(update, context):
     text = "Welcome to the admin menu! Choose an action!"
     update.message.reply_text(
         text, reply_markup=InlineKeyboardMarkup(keyboard))
-    return ADMIN_MENU
+    return MENU_ADMIN
 
 
 def admin_manual_update1(update, context):
@@ -40,7 +43,7 @@ def admin_manual_update1(update, context):
         keyboard.append([InlineKeyboardButton(group_name, callback_data=group_name)])
     text = "Pick a group's base to edit"
 
-    update.callback_query.message.chat.send_message(
+    update.callback_query.message.reply_text(
         text, reply_markup=InlineKeyboardMarkup(keyboard))
     return ADMIN_MANUAL_UPDATE2
 
@@ -49,7 +52,7 @@ def admin_manual_update2(update, context):
     group_name = update.callback_query.data
     context.user_data['admin_manual_group'] = group_name
     text = f"How much health would you like to add/Subtract from {group_name}?"
-    update.callback_query.message.chat.send_message(text)
+    update.callback_query.message.reply_text(text)
     return ADMIN_MANUAL_UPDATE3
 
 
@@ -58,7 +61,7 @@ def admin_manual_update3(update, context):
         delta_health = int(update.message.text)
     except ValueError:
         update.message.reply_text("Invalid number!!!! :((")
-        return ADMIN_MENU
+        return MENU_ADMIN
 
     context.user_data['admin_delta_health'] = delta_health
     group_name = context.user_data['admin_manual_group']
@@ -88,7 +91,7 @@ def admin_manual_update4(update, context):
     )
     context.bot.send_message(CHAT_PARTICIPANTS, text)
     context.bot.send_message(CHAT_ADMINS, text)
-    return ADMIN_MENU
+    return MENU_ADMIN
 
 update_conv = ConversationHandler(
     entry_points=[
@@ -120,7 +123,7 @@ def admin_arena_status(update, context):
         group_name = group.group_name
         group_health = group.health
         text += f"{group_name}: {group_health}\n"
-    update.callback_query.message.chat.send_message(text)
+    update.callback_query.message.reply_text(text)
 
 # Choose which group to give
 
@@ -132,7 +135,7 @@ def admin_give_items(update, context):
             group_name, callback_data=group_name)])
 
     text = "Pick a group to give the item to!"
-    update.callback_query.message.chat.send_message(
+    update.callback_query.message.reply_text(
         text, reply_markup=InlineKeyboardMarkup(keyboard)
     )
     # Reply to the query that the user sent
@@ -149,13 +152,10 @@ def admin_give_items2(update, context):
 
     text = f"Pick an item to give {group_name}!"
     keyboard = []
-    for item in ITEMS_OFFENSIVE:
+    for item in list(ITEMS_OFFENSIVE.keys()) + ITEMS_DEFENSIVE:
         keyboard.append([InlineKeyboardButton(item, callback_data=item)])
 
-    for item in ITEMS_DEFENSIVE:
-        keyboard.append([InlineKeyboardButton(item, callback_data=item)])
-
-    update.callback_query.message.chat.send_message(
+    update.callback_query.message.reply_text(
         text, reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return ADMIN_ITEM_CONFIRMATION
@@ -169,11 +169,12 @@ def admin_give_items3(update, context):
     text = f"You've given {group_name} the item: {item}"
 
     group = context.bot_data['groups'][group_name]
+    print("giving item to group with obj id ", id(group))
     group.items.append(item)
 
-    update.callback_query.message.chat.send_message(text)
+    update.callback_query.message.reply_text(text)
 
-    return ADMIN_MENU
+    return ConversationHandler.END
 
 
 give_item_conv = ConversationHandler(

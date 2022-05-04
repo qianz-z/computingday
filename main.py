@@ -41,7 +41,6 @@ from userbot import (
 def menu(update, context):
     chat_id = update.effective_chat.id
     if chat_id in USER_ADMINS:
-        pass
         return admin_menu(update, context)
     return main_menu(update, context)
 
@@ -52,8 +51,7 @@ def err(update, context):
     traceback.print_exception(error)
     if update is not None and update.effective_user is not None:
         context.bot.send_message(update.effective_user.id,
-                                 "I'm sorry, an error has occurred. The devs have been alerted!"
-                                 )
+            "I'm sorry, an error has occurred. The devs have been alerted!")
 
 
 def temp(update, context):
@@ -85,14 +83,24 @@ def start(update, context):
     # What users will receive
     text = "Welcome to Computing Day Mass Game! "
     update.message.reply_text(text)
-    context.user_data['group'] = None
+    context.user_data['group_name'] = None
     print("Someone started the bot!")
     return main_menu(update, context)
 
 
+def unrecognized_buttons(update, context):
+    """Edit the query so the user knows button is not accepted."""
+    query = update.callback_query
+    query.answer()
+    text = query.message.text
+    text += "\n\nSorry, this button has expired. Please send the previous command again."
+    query.edit_message_text(text)
+
+
 def switch_user1(update, context):
     update.message.reply_text(
-        "Who would you like to be?", reply_markup=ReplyKeyboardMarkup([['User', 'Admin']]))
+        "Who would you like to be?",
+        reply_markup=ReplyKeyboardMarkup([['User', 'Admin']]))
     return SWITCH_USER
 
 
@@ -103,7 +111,8 @@ def switch_user2(update, context):
     elif text == 'Admin':
         state = MENU_ADMIN
     update.message.reply_text(
-        f"Alrights, switched to {text}.", reply_markup=ReplyKeyboardRemove())
+        f"Alrights you are now a {text}. Send /menu to see what you can do.",
+        reply_markup=ReplyKeyboardRemove())
     return state
 
 
@@ -129,6 +138,7 @@ top_conv = ConversationHandler(
     # if it is not in entry point or in state
     fallbacks=[
         CommandHandler('switch', callback=switch_user1),
+        CallbackQueryHandler(unrecognized_buttons),
     ],
     name='top_conv',
     persistent=True
@@ -142,7 +152,6 @@ if __name__ == '__main__':
     # updater = Updater(API_KEY, use_context=True)
     dispatcher = updater.dispatcher
     dispatcher.add_handler(top_conv)
-    dispatcher.add_handler(CallbackQueryHandler(temp))
     # dispatcher.add_error_handler(err)
 
     if not file_exists:

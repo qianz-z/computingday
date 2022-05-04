@@ -5,15 +5,11 @@
     SWITCH_USER,
     USE_ITEMS,
     USE_ITEMS2,
-    REGISTER,
-    REGISTER_NAME,
-    REGISTER_NAME_CONFIRM,
-    BASE_DECLARE,
-    BASE_DECLARE2,
-    BASE_DECLARE3,
-    CHOOSE_HERO,
-    CHOOSE_HERO_CONFIRM,
-    ADMIN_MENU,
+    REG_TYPING_NAME,
+    REG_CONFIRMING_NAME,
+    REG_TYPING_BASE,
+    REG_SENDING_BASE_PHOTO,
+    REG_CHOOSING_HERO,
     ADMIN_GIVE_ITEM_NEXT,
     ADMIN_ITEM_CONFIRMATION,
     ADMIN_MANUAL_UPDATE,
@@ -25,11 +21,11 @@
 
 
 ITEMS_OFFENSIVE = {
-    'hammer': 150,
-    'chainsaw': 50,
-    'pistol': 20,
-    'axe': 30,
-    'barrett': 80
+    'hammer':   150,
+    'chainsaw':  50,
+    'pistol':    20,
+    'axe':       30,
+    'barrett':   80
 }
 
 # defence_mechanism = +100 base health
